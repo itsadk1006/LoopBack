@@ -1,0 +1,20 @@
+# Secrets
+backend/.env
+.env
+.env.*
+!backend/.env.example
+
+# Python generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+.venv/
+
+# Node generated files
+node_modules/
+frontend/dist/
+
+# Local editor and OS files
+.DS_Store
+Thumbs.db
