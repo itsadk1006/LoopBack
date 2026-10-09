@@ -1,0 +1,24 @@
+LOOPBACK COMPONENT CONNECTIONS & DATA FLOW
+
+This document maps how the files in the repository interact.
+
+1. FRONTEND DATA FLOW (Teammate B)
+- src/App.jsx: Handles routing between Dashboard and IncidentDetail.
+- src/services/api.js: The ONLY file that should make fetch/axios calls. It points to `http://localhost:8000`.
+- src/pages/Dashboard.jsx: Calls `api.getIncidents()` and passes data to IncidentCard components.
+- src/pages/IncidentDetail.jsx: Calls `api.getIncident(id)`. Passes timeline data to `EvidenceTimeline.jsx` and agent status to `AgentActionPanel.jsx`.
+
+2. BACKEND API FLOW (Teammate A)
+- backend/app/main.py: The FastAPI server. Mounts the routes.
+- backend/app/api/routes.py: Defines endpoints (e.g., `/api/incidents/{id}`).
+  -> When `POST /api/incidents/{id}/investigate` is hit, it calls the LangGraph compiled graph in `graph.py`.
+
+3. LANGGRAPH AGENT FLOW (Teammate A)
+- backend/app/agent/graph.py: The central orchestrator. It imports `AirQualityState` from state.py and connects the nodes.
+- backend/app/agent/nodes.py: The actual steps.
+  -> `LLM_Analyzer` node takes the state, creates a prompt, and calls local Llama 3 via Ollama.
+  -> It uses functions defined in `tools.py` (e.g., `get_related_records()`).
+- backend/app/agent/tools.py: These functions query MongoDB (via `database.py`) to fetch the simulated `seed_incidents.json` data.
+
+CRITICAL HANDOFF:
+The frontend `AgentActionPanel.jsx` (Teammate B) expects the backend `routes.py` (Teammate A) to return a specific JSON schema defined in `models/incident.py`. Do not change the JSON keys without telling the other teammate.
