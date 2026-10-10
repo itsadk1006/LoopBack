@@ -1,12 +1,73 @@
+import os
+import uuid
+import shutil
 from typing import List
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, status
-from app.models.incident import Incident, ActionPayload
+from fastapi import APIRouter, HTTPException, status, UploadFile, File
+from app.models.incident import Incident, ActionPayload, UploadedEvidence
 from app.models.evidence import TimelineEvent
 from app.core import database
 from app.agent.graph import run_agent_investigation_graph
 
 router = APIRouter(prefix="/api")
+
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
+MAX_FILE_SIZE = 5 * 1024 * 1024 # 5 MB
+
+@router.post("/incidents/{incident_id}/evidence", response_model=Incident, tags=["Evidence"])
+def upload_evidence(incident_id: str, file: UploadFile = File(...)):
+    record = database.get_incident_by_id(incident_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident '{incident_id}' not found."
+        )
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed: {ALLOWED_EXTENSIONS}"
+        )
+
+    file.file.seek(0, os.SEEK_END)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size exceeds 5MB limit."
+        )
+
+    safe_filename = f"{uuid.uuid4().hex}{ext}"
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "evidence")
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, safe_filename)
+
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save evidence: {e}"
+        )
+
+    new_evidence = {
+        "id": f"EV-{uuid.uuid4().hex[:8].upper()}",
+        "filename": file.filename,
+        "contentType": file.content_type or "application/octet-stream",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "storagePath": f"/evidence/{safe_filename}",
+        "sizeBytes": file_size
+    }
+
+    record.setdefault("uploadedEvidence", []).append(new_evidence)
+    database.save_incident(record)
+    return record
 
 @router.get("/health", tags=["Health"])
 def get_health():

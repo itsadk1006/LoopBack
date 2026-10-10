@@ -1,5 +1,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
+export const getBaseUrl = () => {
+  return API_BASE_URL.replace(/\/api\/?$/, '');
+};
+
 async function handleResponse(response) {
   if (!response.ok) {
     let errorMessage = `HTTP Error ${response.status}: ${response.statusText}`;
@@ -42,6 +46,16 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, notes }),
+    });
+    return handleResponse(res);
+  },
+
+  async uploadEvidence(id, file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/incidents/${id}/evidence`, {
+      method: 'POST',
+      body: formData,
     });
     return handleResponse(res);
   },

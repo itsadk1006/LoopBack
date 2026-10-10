@@ -18,3 +18,6 @@ frontend/dist/
 # Local editor and OS files
 .DS_Store
 Thumbs.db
+
+# Evidence Uploads
+backend/data/evidence/

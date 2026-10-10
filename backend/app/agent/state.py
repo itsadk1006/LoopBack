@@ -10,6 +10,7 @@ class IncidentState(TypedDict, total=False):
     proposed_action: Optional[Dict[str, Any]]
     agent_action_required: bool
     used_llm: bool
+    used_llm_provider: Optional[str]
     fallback_reason: Optional[str]
     error: Optional[str]
     _raw_llm_output: Optional[str]

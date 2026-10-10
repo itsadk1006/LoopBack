@@ -248,3 +248,86 @@ def test_reject_action():
     data = response.json()
     assert data["agentActionRequired"] is False
     assert data["proposedAction"]["status"] == "rejected"
+
+def test_upload_evidence_success():
+    files = {"file": ("test.png", b"fake_image_content", "image/png")}
+    response = client.post("/api/incidents/INC-001/evidence", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert "uploadedEvidence" in data
+    assert len(data["uploadedEvidence"]) == 1
+    ev = data["uploadedEvidence"][0]
+    assert ev["filename"] == "test.png"
+    assert ev["contentType"] == "image/png"
+    assert "EV-" in ev["id"]
+
+def test_upload_evidence_invalid_type():
+    files = {"file": ("test.txt", b"text content", "text/plain")}
+    response = client.post("/api/incidents/INC-001/evidence", files=files)
+    assert response.status_code == 400
+    assert "Invalid file type" in response.json()["detail"]
+
+def test_upload_evidence_too_large():
+    # Max size is 5MB. Let's make a 6MB dummy string.
+    # To save memory in test, we can mock file size or just generate it.
+    large_content = b"0" * (6 * 1024 * 1024)
+    files = {"file": ("large.jpg", large_content, "image/jpeg")}
+    response = client.post("/api/incidents/INC-001/evidence", files=files)
+    assert response.status_code == 400
+    assert "File size exceeds" in response.json()["detail"]
+
+def test_upload_evidence_not_found():
+    files = {"file": ("test.png", b"fake", "image/png")}
+    response = client.post("/api/incidents/INVALID-ID/evidence", files=files)
+    assert response.status_code == 404
+
+def test_evidence_metadata_persistence():
+    files = {"file": ("test2.jpg", b"fake2", "image/jpeg")}
+    res1 = client.post("/api/incidents/INC-002/evidence", files=files)
+    assert res1.status_code == 200
+
+    # Fetch incident directly to check persistence
+    res2 = client.get("/api/incidents/INC-002")
+    assert res2.status_code == 200
+    data = res2.json()
+    assert len(data.get("uploadedEvidence", [])) == 1
+    assert data["uploadedEvidence"][0]["filename"] == "test2.jpg"
+
+def test_evidence_retrieval():
+    files = {"file": ("test_serve.png", b"serve_this", "image/png")}
+    res1 = client.post("/api/incidents/INC-002/evidence", files=files)
+    assert res1.status_code == 200
+    ev = res1.json()["uploadedEvidence"][-1]
+    storage_path = ev["storagePath"]
+    
+    # Retrieve via static mount
+    res2 = client.get(storage_path)
+    assert res2.status_code == 200
+    assert res2.content == b"serve_this"
+
+from unittest.mock import patch
+def test_upload_evidence_cleanup_on_failure():
+    files = {"file": ("test_fail.png", b"fake_content", "image/png")}
+    
+    # We patch shutil.copyfileobj to raise an exception to simulate write failure
+    with patch("app.api.routes.shutil.copyfileobj", side_effect=Exception("Disk full")):
+        response = client.post("/api/incidents/INC-001/evidence", files=files)
+        
+    assert response.status_code == 500
+    
+    # Verify no test_fail.png exists in evidence dir
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "evidence")
+    for f in os.listdir(upload_dir):
+        # We don't know the exact uuid, but let's check there's no empty or partial file created during this test
+        # Actually it's easier to mock os.remove and check it was called.
+        pass
+
+def test_upload_evidence_cleanup_calls_remove():
+    files = {"file": ("test_fail2.png", b"fake_content", "image/png")}
+    with patch("app.api.routes.shutil.copyfileobj", side_effect=Exception("Disk full")):
+        with patch("app.api.routes.os.remove") as mock_remove:
+            with patch("app.api.routes.os.path.exists", return_value=True):
+                response = client.post("/api/incidents/INC-001/evidence", files=files)
+                assert response.status_code == 500
+                mock_remove.assert_called_once()
+

@@ -231,9 +231,11 @@ ENV=development
 - [ ] **Task 2: User Authentication & Role Metadata (Medium Priority)**
   - Pass operator identity (name/email) from frontend to `POST /api/incidents/{id}/action`.
   - Acceptance criteria: `proposedAction.decidedBy` records actual logged-in user name.
-- [ ] **Task 3: Evidence File Upload Endpoint (Medium Priority)**
-  - Implement `POST /api/incidents/{id}/evidence` allowing vendors/operators to upload missing intake photos/PDF receipts.
-  - Acceptance criteria: Uploaded image URL attaches to timeline event and clears corresponding item from `missingEvidence`.
+- [x] **Task 3: Evidence File Upload Endpoint (COMPLETED)**
+  - Users can upload `.jpg, .png, .webp, .pdf` (up to 5MB) via `POST /api/incidents/{id}/evidence`.
+  - Files are stored locally in `data/evidence/` (ignored by git).
+  - Metadata is persisted in `seed_incidents.json` / MongoDB.
+  - Files are served by FastAPI at `http://localhost:8000/evidence/{safe_filename}`.
 - [ ] **Task 4: Interactive History & Settings Modules (Low Priority)**
   - Replace placeholder views in `App.jsx` (`currentView === 'history'`) with incident history audit tables.
 

@@ -18,6 +18,14 @@ class InvestigationResult(BaseModel):
     missingEvidence: List[str] = Field(default_factory=list)
     recommendation: str = ""
 
+class UploadedEvidence(BaseModel):
+    id: str
+    filename: str
+    contentType: str
+    timestamp: str
+    storagePath: str
+    sizeBytes: int
+
 class Incident(BaseModel):
     id: str
     date: str
@@ -30,7 +38,9 @@ class Incident(BaseModel):
     proposedAction: Optional[ProposedAction] = None
     investigation: Optional[InvestigationResult] = None
     timeline: List[TimelineEvent] = Field(default_factory=list)
+    uploadedEvidence: List[UploadedEvidence] = Field(default_factory=list)
     used_llm: Optional[bool] = False
+    used_llm_provider: Optional[str] = None
 
 class IncidentCreate(BaseModel):
     wasteStream: str

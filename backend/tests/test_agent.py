@@ -67,6 +67,33 @@ def test_mocked_ollama_successful_llm_json():
         assert "Request high-res" in result["investigation"]["recommendation"]
         assert "Ollama" in result["agentStatus"]
 
+def test_mocked_bedrock_successful_llm_json():
+    mock_llm_payload = {
+        "generation": json.dumps({
+            "hypotheses": ["AWS Bedrock cause"],
+            "missingEvidence": ["AWS missing evidence"],
+            "recommendation": "AWS Bedrock recommendation"
+        })
+    }
+
+    mock_response_body = MagicMock()
+    mock_response_body.read.return_value = json.dumps(mock_llm_payload).encode("utf-8")
+    
+    mock_invoke_response = {
+        "body": mock_response_body
+    }
+
+    mock_boto_client = MagicMock()
+    mock_boto_client.invoke_model.return_value = mock_invoke_response
+
+    with patch("app.agent.nodes.settings.LLM_PROVIDER", "bedrock"):
+        with patch("app.agent.nodes.boto3.client", return_value=mock_boto_client):
+            result = run_agent_investigation_graph(dict(TEST_INCIDENT))
+            assert result["used_llm"] is True
+            assert result["used_llm_provider"] == "bedrock"
+            assert len(result["investigation"]["hypotheses"]) == 1
+            assert "Amazon Bedrock" in result["agentStatus"]
+
 def test_ollama_timeout_triggers_deterministic_fallback():
     with patch("app.agent.nodes.httpx.post", side_effect=Exception("Connection timeout")):
         result = run_agent_investigation_graph(dict(TEST_INCIDENT))
@@ -114,3 +141,54 @@ def test_preserves_existing_approved_action():
         res = run_agent_investigation_graph(incident)
         assert res["proposedAction"]["status"] == "approved"
         assert res["agentActionRequired"] is False
+
+def test_mocked_ollama_fenced_json():
+    json_payload = json.dumps({
+        "hypotheses": ["Fenced hypothesis"],
+        "missingEvidence": ["Fenced missing"],
+        "recommendation": "Fenced recommendation"
+    })
+    mock_llm_payload = {
+        "response": f"Here is the investigation:\n```json\n{json_payload}\n```\nHope this helps."
+    }
+
+    mock_response = httpx.Response(200, json=mock_llm_payload)
+
+    with patch("app.agent.nodes.httpx.post", return_value=mock_response):
+        result = run_agent_investigation_graph(dict(TEST_INCIDENT))
+        assert result["used_llm"] is True
+        assert result["investigation"]["hypotheses"] == ["Fenced hypothesis"]
+
+def test_mocked_ollama_explanatory_json():
+    json_payload = json.dumps({
+        "hypotheses": ["Explanatory hypothesis"],
+        "missingEvidence": ["Explanatory missing"],
+        "recommendation": "Explanatory recommendation"
+    })
+    mock_llm_payload = {
+        "response": f"Sure, I can help with that.\n\n{json_payload}\n\nLet me know if you need anything else!"
+    }
+
+    mock_response = httpx.Response(200, json=mock_llm_payload)
+
+    with patch("app.agent.nodes.httpx.post", return_value=mock_response):
+        result = run_agent_investigation_graph(dict(TEST_INCIDENT))
+        assert result["used_llm"] is True
+        assert result["investigation"]["hypotheses"] == ["Explanatory hypothesis"]
+
+def test_mocked_ollama_schema_invalid_json_triggers_fallback():
+    # Valid JSON but missing required fields
+    json_payload = json.dumps({
+        "incorrectKey": ["Hypothesis"]
+    })
+    mock_llm_payload = {
+        "response": json_payload
+    }
+
+    mock_response = httpx.Response(200, json=mock_llm_payload)
+
+    with patch("app.agent.nodes.httpx.post", return_value=mock_response):
+        result = run_agent_investigation_graph(dict(TEST_INCIDENT))
+        assert result["used_llm"] is False
+        assert "Deterministic Rules Engine" in result["agentStatus"]
+

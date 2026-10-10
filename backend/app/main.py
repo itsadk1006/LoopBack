@@ -1,7 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.api.routes import router
 from app.core import database
 
@@ -37,6 +39,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "evidence")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/evidence", StaticFiles(directory=UPLOAD_DIR), name="evidence")
 
 app.include_router(router)
 

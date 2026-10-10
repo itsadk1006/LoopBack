@@ -101,9 +101,17 @@ def run_agent_investigation_graph(incident: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     used_llm = final_state.get("used_llm", False)
+    used_provider = final_state.get("used_llm_provider", "ollama")
     facts_count = len(investigation_result["verifiedFacts"])
     gaps_count = len(investigation_result["missingEvidence"])
-    engine_name = "Ollama (llama3.2)" if used_llm else "Deterministic Rules Engine"
+    
+    if used_llm:
+        if used_provider == "bedrock":
+            engine_name = "Amazon Bedrock (Llama 3)"
+        else:
+            engine_name = "Ollama (llama3.2)"
+    else:
+        engine_name = "Deterministic Rules Engine"
 
     proposed_action = final_state.get("proposed_action")
     action_status_str = f" Action status: {proposed_action['status']}." if proposed_action else ""
@@ -115,5 +123,6 @@ def run_agent_investigation_graph(incident: Dict[str, Any]) -> Dict[str, Any]:
     if proposed_action:
         incident["proposedAction"] = proposed_action
     incident["used_llm"] = used_llm
+    incident["used_llm_provider"] = final_state.get("used_llm_provider")
 
     return incident
