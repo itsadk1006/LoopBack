@@ -3,7 +3,13 @@ import logging
 import httpx
 from typing import Dict, Any
 from app.agent.state import IncidentState
-from app.agent.tools import get_facility_standards, get_waste_stream_info, format_timeline_for_prompt
+from app.agent.tools import (
+    get_facility_standards,
+    get_waste_stream_info,
+    format_timeline_for_prompt,
+    lookup_facility_standards,
+    check_waste_stream_specs
+)
 from app.agent.investigation import run_incident_investigation
 from app.core.config import settings
 import boto3
@@ -11,8 +17,8 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 logger = logging.getLogger("loopback.nodes")
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = "llama3.2:latest"
+OLLAMA_URL = f"{settings.OLLAMA_HOST}/api/generate"
+DEFAULT_MODEL = settings.OLLAMA_MODEL_ID
 OLLAMA_TIMEOUT = 30.0
 
 def extract_facts_node(state: IncidentState) -> IncidentState:
@@ -109,6 +115,50 @@ JSON RESPONSE FORMAT:
             logger.warning(f"Bedrock generic error: {e}")
             state["used_llm"] = False
             state["fallback_reason"] = f"Bedrock unreachable ({type(e).__name__})"
+    elif settings.LLM_PROVIDER == "strands":
+        try:
+            from strands import Agent
+            from strands.models.ollama import OllamaModel
+
+            ollama_model = OllamaModel(
+                host=settings.OLLAMA_HOST,
+                model_id=settings.STRANDS_MODEL_ID,
+                temperature=0.1,
+                ollama_client_args={"timeout": 60.0}
+            )
+
+            # Models lacking Ollama tool support (e.g. gemma:2b) use the no-tools Strands agent path directly
+            # to avoid repeatedly retrying unsupported tool requests.
+            model_id_lower = settings.STRANDS_MODEL_ID.lower()
+            supports_tools = "gemma" not in model_id_lower
+
+            if supports_tools:
+                try:
+                    agent = Agent(
+                        model=ollama_model,
+                        tools=[lookup_facility_standards, check_waste_stream_specs]
+                    )
+                    response = agent(prompt)
+                except Exception as tool_err:
+                    if "does not support tools" in str(tool_err).lower():
+                        logger.info(f"Model {settings.STRANDS_MODEL_ID} does not support Ollama tools; falling back to no-tools Strands agent.")
+                        agent = Agent(model=ollama_model)
+                        response = agent(prompt)
+                    else:
+                        raise
+            else:
+                agent = Agent(model=ollama_model)
+                response = agent(prompt)
+
+            raw_text = str(response).strip()
+
+            state["_raw_llm_output"] = raw_text
+            state["used_llm"] = True
+            state["used_llm_provider"] = "strands"
+        except Exception as e:
+            logger.warning(f"Strands agent execution failed ({e}). Routing to fallback.")
+            state["used_llm"] = False
+            state["fallback_reason"] = f"Strands error ({type(e).__name__})"
     else:
         payload = {
             "model": DEFAULT_MODEL,

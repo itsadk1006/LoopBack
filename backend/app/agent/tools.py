@@ -51,3 +51,21 @@ def format_timeline_for_prompt(timeline: List[Dict[str, Any]]) -> str:
             evidence_str = f" [Evidence: {evidence_type}]"
         formatted_lines.append(f"{idx}. [{ts}] {title}: {desc}{evidence_str}")
     return "\n".join(formatted_lines)
+
+try:
+    from strands import tool
+except ImportError:
+    def tool(fn):
+        return fn
+
+@tool
+def lookup_facility_standards(facility_name: str) -> str:
+    """Returns official operational standards, intake criteria, and contamination thresholds for a recycling facility."""
+    standards = get_facility_standards(facility_name)
+    return str(standards)
+
+@tool
+def check_waste_stream_specs(waste_stream: str) -> str:
+    """Returns official segregation rules and accepted materials for a given waste stream."""
+    return get_waste_stream_info(waste_stream)
+

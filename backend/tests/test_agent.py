@@ -192,3 +192,94 @@ def test_mocked_ollama_schema_invalid_json_triggers_fallback():
         assert result["used_llm"] is False
         assert "Deterministic Rules Engine" in result["agentStatus"]
 
+def test_mocked_strands_successful_llm_json():
+    mock_json = json.dumps({
+        "hypotheses": ["Contamination from collection truck"],
+        "missingEvidence": ["Scalehouse weight receipt"],
+        "recommendation": "Request scalehouse documentation"
+    })
+
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.return_value = mock_json
+
+    with patch("app.agent.nodes.settings.LLM_PROVIDER", "strands"):
+        with patch("strands.Agent", return_value=mock_agent_instance):
+            result = run_agent_investigation_graph(dict(TEST_INCIDENT))
+            assert result["used_llm"] is True
+            assert result["used_llm_provider"] == "strands"
+            assert result["investigation"]["hypotheses"] == ["Contamination from collection truck"]
+            assert result["investigation"]["missingEvidence"] == ["Scalehouse weight receipt"]
+            assert "AWS Strands Agent" in result["agentStatus"]
+
+def test_strands_error_triggers_fallback():
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.side_effect = Exception("Ollama connection refused")
+
+    with patch("app.agent.nodes.settings.LLM_PROVIDER", "strands"):
+        with patch("strands.Agent", return_value=mock_agent_instance):
+            result = run_agent_investigation_graph(dict(TEST_INCIDENT))
+            assert result["used_llm"] is False
+            assert len(result["investigation"]["verifiedFacts"]) > 0
+            assert "Deterministic Rules Engine" in result["agentStatus"]
+
+def test_strands_invalid_json_triggers_fallback():
+    mock_agent_instance = MagicMock()
+    mock_agent_instance.return_value = "Sorry, I cannot investigate this."
+
+    with patch("app.agent.nodes.settings.LLM_PROVIDER", "strands"):
+        with patch("strands.Agent", return_value=mock_agent_instance):
+            result = run_agent_investigation_graph(dict(TEST_INCIDENT))
+            assert result["used_llm"] is False
+            assert "Deterministic Rules Engine" in result["agentStatus"]
+
+def test_strands_no_tools_path_for_gemma():
+    mock_json = json.dumps({
+        "hypotheses": ["Gemma reasoning hypothesis"],
+        "missingEvidence": ["Scalehouse log"],
+        "recommendation": "Review logs"
+    })
+
+    agent_calls = []
+    def mock_agent_factory(*args, **kwargs):
+        agent_calls.append(kwargs)
+        mock_instance = MagicMock()
+        mock_instance.return_value = mock_json
+        return mock_instance
+
+    with patch("app.agent.nodes.settings.LLM_PROVIDER", "strands"):
+        with patch("app.agent.nodes.settings.STRANDS_MODEL_ID", "gemma:2b"):
+            with patch("strands.Agent", side_effect=mock_agent_factory):
+                result = run_agent_investigation_graph(dict(TEST_INCIDENT))
+                assert result["used_llm"] is True
+                assert result["used_llm_provider"] == "strands"
+                assert result["investigation"]["hypotheses"] == ["Gemma reasoning hypothesis"]
+                assert "tools" not in agent_calls[0]
+
+def test_strands_tool_unsupported_error_recovers_via_no_tools():
+    mock_json = json.dumps({
+        "hypotheses": ["Recovered hypothesis"],
+        "missingEvidence": ["Camera footage"],
+        "recommendation": "Inspect camera"
+    })
+
+    call_count = 0
+    def mock_agent_factory(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        mock_instance = MagicMock()
+        if "tools" in kwargs and kwargs["tools"]:
+            mock_instance.side_effect = Exception("registry.ollama.ai/library/custom:7b does not support tools (status code: 400)")
+        else:
+            mock_instance.return_value = mock_json
+        return mock_instance
+
+    with patch("app.agent.nodes.settings.LLM_PROVIDER", "strands"):
+        with patch("app.agent.nodes.settings.STRANDS_MODEL_ID", "custom:7b"):
+            with patch("strands.Agent", side_effect=mock_agent_factory):
+                result = run_agent_investigation_graph(dict(TEST_INCIDENT))
+                assert result["used_llm"] is True
+                assert result["used_llm_provider"] == "strands"
+                assert result["investigation"]["hypotheses"] == ["Recovered hypothesis"]
+                assert call_count == 2
+
+

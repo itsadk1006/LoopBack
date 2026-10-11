@@ -9,6 +9,7 @@ from app.agent.nodes import (
     action_proposal_node,
     fallback_node
 )
+from app.core.config import settings
 
 logger = logging.getLogger("loopback.graph")
 
@@ -108,8 +109,10 @@ def run_agent_investigation_graph(incident: Dict[str, Any]) -> Dict[str, Any]:
     if used_llm:
         if used_provider == "bedrock":
             engine_name = "Amazon Bedrock (Llama 3)"
+        elif used_provider == "strands":
+            engine_name = f"AWS Strands Agent ({settings.STRANDS_MODEL_ID})"
         else:
-            engine_name = "Ollama (llama3.2)"
+            engine_name = f"Ollama ({settings.OLLAMA_MODEL_ID})"
     else:
         engine_name = "Deterministic Rules Engine"
 

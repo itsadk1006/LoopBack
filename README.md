@@ -25,18 +25,27 @@ LoopBack is a local, open-source agentic workflow built with LangGraph and FastA
 - **Backend:** Python + FastAPI.
 - **Frontend:** React + Vite + Tailwind CSS.
 - **LLM / Reasoning Providers:** 
-  - **Local Ollama (Llama 3.2):** Fully open-source, zero-cost local inference.
-  - **Amazon Bedrock:** Integration built via `boto3` for cloud inference. *(Note: While the backend logic and tests are fully implemented, live Bedrock connectivity remains unverified until a successful real AWS request is tested with authorized credentials. If AWS fails, the system safely triggers a deterministic fallback).*
+  - **Local Ollama (Llama 3.2):** Default local inference provider (`LLM_PROVIDER=ollama`).
+  - **AWS Strands Agents SDK (`strands-agents`):** AWS open-source agentic SDK running locally via `OllamaModel` (`LLM_PROVIDER=strands`). Verified with `gemma:2b` via a prompt-based reasoning path without tool calling (since `gemma:2b` does not support Ollama's tool-calling API). Users must explicitly set `LLM_PROVIDER=strands` in their environment to select this provider.
+  - **Amazon Bedrock:** Integration built via `boto3` for cloud inference. *(Note: While backend logic and unit tests are implemented, live Bedrock connectivity and cloud deployment have not been verified with real AWS credentials. The project runs locally under the AWS Open Source "Build It" route).*
 
 ## Setup & Local Development
 
 ### Prerequisites
 - Node.js (v22+)
 - Python 3.10+
-- (Optional) Ollama installed locally with `llama3.2:latest`
+- Ollama running locally (`http://localhost:11434`)
+  - For default provider (`LLM_PROVIDER=ollama`): `llama3.2:latest`
+  - For AWS Strands provider (`LLM_PROVIDER=strands`): `gemma:2b`
 
-### AWS Configuration
-For instructions on enabling the Amazon Bedrock provider, please read the [AWS Setup & Handoff Guide](docs/AWS_SETUP_AND_HANDOFF.md).
+### Configuration
+Copy the environment template and customize as needed:
+```bash
+cp backend/.env.example backend/.env
+```
+- **To use AWS Strands Agents SDK:** Set `LLM_PROVIDER=strands` and `STRANDS_MODEL_ID=gemma:2b` in `backend/.env`.
+- **To use default Ollama:** Leave `LLM_PROVIDER=ollama` (default).
+- **To configure Amazon Bedrock:** Refer to the [AWS Setup & Handoff Guide](docs/AWS_SETUP_AND_HANDOFF.md).
 
 ### 1. Start the Backend
 ```bash
