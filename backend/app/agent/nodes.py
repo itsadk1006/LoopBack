@@ -290,6 +290,8 @@ def action_proposal_node(state: IncidentState) -> IncidentState:
 def fallback_node(state: IncidentState) -> IncidentState:
     """Invokes deterministic rule fallback if LLM is offline, times out, or produces invalid output."""
     incident = state.get("incident", {})
+    reason = state.get("fallback_reason") or "unspecified"
+    logger.info(f"Invoking deterministic rules fallback for incident '{incident.get('id', 'unknown')}'. Reason: {reason}")
     fallback_res = run_incident_investigation(incident)
 
     state["verified_facts"] = fallback_res["investigation"]["verifiedFacts"]

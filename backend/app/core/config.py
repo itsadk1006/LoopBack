@@ -1,7 +1,18 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Search for backend/.env first, then root .env, then fallback to default search
+_backend_dir = Path(__file__).resolve().parent.parent.parent
+_backend_env = _backend_dir / ".env"
+_root_env = _backend_dir.parent / ".env"
+
+if _backend_env.exists():
+    load_dotenv(dotenv_path=_backend_env)
+elif _root_env.exists():
+    load_dotenv(dotenv_path=_root_env)
+else:
+    load_dotenv()
 
 class Settings:
     MONGODB_URI: str = os.getenv("MONGODB_URI", "").strip()
